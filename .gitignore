@@ -1,0 +1,13 @@
+build/*
+*.obj
+*.exe
+*.ilk
+*.pdb
+*.txt
+*.ini
+
+!build/.gitkeep
+
+!LICENSE.txt
+!README.txt
+!COPYING.txt

@@ -11,6 +11,8 @@
 
 #define WIDTH 1280
 #define HEIGHT 720
+#define MIN_WIDTH 1000
+#define MIN_HEIGHT 700
 #define FPS 60
 
 #define MIDI_LEN 22
@@ -57,7 +59,7 @@ internal void render_control_panel(Rectangle rect, int button_padding, int num_b
 
     for (int i = 0; i < num_buttons; ++i) {
         DrawRectangleRounded(button_rect, 0.4f, 0, { 50, 50, 50, 255 });
-        draw_text_centered("preset", (int) text_center.x, (int) text_center.y, 25);
+        draw_text_centered("preset", (int) text_center.x, (int) text_center.y, 22);
         
         button_rect.y += button_rect.height + button_padding;
         text_center.y = button_rect.y + button_rect.height/2.0f;
@@ -69,35 +71,37 @@ int main(int argc, char **argv)
     UNUSED(argc);
     UNUSED(argv);
 
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     InitWindow(WIDTH, HEIGHT, "A Window");
+    SetWindowMinSize(MIN_WIDTH, MIN_HEIGHT);    
     SetTargetFPS(FPS);
-
-    const int key_width = 35;
-    const int key_padding = 5;
-
-    Rectangle keyboard_rect = {0};
-    keyboard_rect.width = MIDI_LEN * (key_width + key_padding) - key_padding;
-    keyboard_rect.height = 240;
-    keyboard_rect.x = 0;
-    keyboard_rect.y = HEIGHT - keyboard_rect.height;
-
-    Rectangle control_panel_rect = {0};
-    control_panel_rect.width = WIDTH - keyboard_rect.width;
-    control_panel_rect.height = HEIGHT;
-    control_panel_rect.x = keyboard_rect.width;
-    control_panel_rect.y = 0;
-    
-    Vector2 text_center = {0};
-    text_center.x = keyboard_rect.width/2.0f;
-    text_center.y = (HEIGHT - keyboard_rect.height)/2.0f;
     
     while (!WindowShouldClose()) {
+        const int key_width = (int) (GetScreenWidth() * 0.028f);
+        const int key_padding = 5;
+        
+        Rectangle keyboard_rect = {0};
+        keyboard_rect.width = (float) (MIDI_LEN * (key_width + key_padding) - key_padding);
+        keyboard_rect.height = 250;
+        keyboard_rect.x = 0;
+        keyboard_rect.y = GetScreenHeight() - keyboard_rect.height;
+
+        Rectangle control_panel_rect = {0};
+        control_panel_rect.width = GetScreenWidth() - keyboard_rect.width;
+        control_panel_rect.height = (float) GetScreenHeight();
+        control_panel_rect.x = keyboard_rect.width;
+        control_panel_rect.y = 0;
+    
+        Vector2 text_center = {0};
+        text_center.x = keyboard_rect.width/2.0f;
+        text_center.y = (GetScreenHeight() - keyboard_rect.height)/2.0f;
+        
         BeginDrawing();
         ClearBackground({ 20, 20, 20, 255 });
         
         render_keyboard(keyboard_rect, key_width, key_padding);
         render_control_panel(control_panel_rect, 20, 4);
-        draw_text_centered("There might be something here soon(tm)", (int) text_center.x, (int) text_center.y, 33);
+        draw_text_centered("There might be something here soon(tm)", (int) text_center.x, (int) text_center.y, 30);
 
         EndDrawing();
     }

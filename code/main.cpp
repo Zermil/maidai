@@ -6,6 +6,9 @@
 
 #define UNUSED(x) ((void)(x))
 
+#include "./windows_platform.h"
+#define NOTE_ON 0x90
+
 #define internal static
 #define global static
 
@@ -23,6 +26,8 @@ internal void draw_text_centered(const char *text, int x, int y, int font_size)
     DrawText(text, x - text_width/2, y - font_size/2, font_size, WHITE);
 }
 
+// @Note: Yes this is linear, we have 15 black keys/22 white keys, this is not a performance bottle-neck as CPUs are fast.
+// Feel free to change it if you have other, better ideas though.
 internal bool collides_with_keys(Rectangle *keys, size_t size)
 {
     for (size_t i = 0; i < size; ++i) {
@@ -71,8 +76,6 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
     }
 
     for (int i = 0; i < MIDI_LEN; ++i) {
-        // @Note: Yes this is linear, we have 15 black keys/22 white keys, this is not a performance bottle-neck as CPUs are fast.
-        // Feel free to change it if you have other, better ideas though.
         bool black_key_collision = collides_with_keys(black_keys, MIDI_LEN - 1);
         
         if (CheckCollisionPointRec(GetMousePosition(), white_keys[i]) && !black_key_collision) {
@@ -134,6 +137,22 @@ internal void render_control_panel(Rectangle rect, int button_padding, int num_b
     }
 }
 
+internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instance, DWORD_PTR arg0, DWORD_PTR arg1)
+{
+    UNUSED(arg1);
+    UNUSED(handle);
+    UNUSED(instance);
+
+    if (msg != MIM_DATA) return;
+
+    unsigned int midi_message = arg0 & 0xFF;
+    unsigned int note = (arg0 >> 8) & 0xFF;
+
+    if (midi_message == NOTE_ON) {
+        printf("%u\n", note);
+    }
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -143,6 +162,9 @@ int main(int argc, char **argv)
     InitWindow(WIDTH, HEIGHT, "A Window");
     SetWindowMinSize(MIN_WIDTH, MIN_HEIGHT);    
     SetTargetFPS(FPS);
+
+    HMIDIIN handle = 0;
+    MMRESULT open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
     
     while (!WindowShouldClose()) {
         const int key_width = (int) (GetScreenWidth() * 0.028f);
@@ -169,11 +191,20 @@ int main(int argc, char **argv)
         
         render_keyboard(keyboard_rect, key_width, key_padding);
         render_control_panel(control_panel_rect, 20, 4);
-        draw_text_centered("There might be something here soon(tm)", (int) text_center.x, (int) text_center.y, 30);
+
+        if (open_device_result != MMSYSERR_NOERROR) {
+            draw_text_centered("Could not find MIDI device!", (int) text_center.x, (int) text_center.y, 30);
+            open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
+        } else {
+            draw_text_centered("MIDI device connected!", (int) text_center.x, (int) text_center.y, 30);
+            midiInStart(handle);
+        }
 
         EndDrawing();
     }
 
+    midiInStop(handle);
+    midiInClose(handle);
     CloseWindow();
     
     return 0;

@@ -6,16 +6,34 @@
 
 #define UNUSED(x) ((void)(x))
 
-#include "./windows_platform.h"
+// @Note: Please, if anyone has a solution for this, _without namespaces_
+// I'll gladly take it
+#if defined(_WIN32)
+#define NOMINMAX
+#define NODRAWTEXT
+#define NOGDI
+#define WIN32_LEAN_AND_MEAN
+
+#define CloseWindow win32_close_window
+#define ShowCursor win32_show_cursor
+
+#include <windows.h>
+#include <mmsystem.h>
+
+#undef CloseWindow
+#undef ShowCursor
+#endif // _WIN32
+
 #define NOTE_ON 0x90
 #define NOTE_OFF 0x80
+#define NOTE_OFFSET 48
 
 #define internal static
 #define global static
 
 #define WIDTH 1280
 #define HEIGHT 720
-#define MIN_WIDTH 1000
+#define MIN_WIDTH 1100
 #define MIN_HEIGHT 700
 #define FPS 60
 
@@ -27,10 +45,20 @@ struct Note {
     int note_number;
 };
 
-global bool g_highlighted_notes[MIDI_FULL_LEN] = {0};
-global const char *g_log_message = 0;
-global bool g_midi_device_started = false;
-global MMRESULT g_open_device_result = MMSYSERR_BADDEVICEID;
+struct Internal_State {
+    const char *log_message;
+    
+    bool highlighted_notes[MIDI_FULL_LEN];
+    int midi_keys_map[MIDI_FULL_LEN];
+    
+    bool midi_device_started;
+    MMRESULT open_device_result;
+};
+
+// @Note: For all new programmers, I'm sorry but real life isn't how your CS professor wants it to be.
+// In real life you deal with globals and that's fine, as long as you know how to handle them and who
+// and when is going to touch them.
+global Internal_State state = {0};
 
 internal void draw_text_centered(const char *text, int x, int y, int font_size)
 {
@@ -49,6 +77,15 @@ internal bool collides_with_keys(Note *keys, size_t size)
     }
 
     return(false);
+}
+
+internal void load_default_config()
+{
+    const char *keys = "Q2W3ER5T6Y7UI";
+
+    for (int i = 0; i < 12; ++i) {
+        state.midi_keys_map[i + 12] = keys[i];
+    }
 }
 
 // @Note: By default we render 'regular/extended' ffxiv keyboard, at some point
@@ -100,7 +137,7 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
                 printf("[WHITE_KEY_%d]\n", white_keys[i].note_number);
             }
         } else {
-            bool highlight = g_highlighted_notes[white_keys[i].note_number];
+            bool highlight = state.highlighted_notes[white_keys[i].note_number];
             DrawRectangleRec(white_keys[i].rect, highlight ? GREEN : WHITE);
         }
     }
@@ -116,7 +153,7 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
                 printf("[BLACK_KEY_%d]\n", black_keys[i].note_number);
             }
         } else {
-            bool highlight = g_highlighted_notes[black_keys[i].note_number];
+            bool highlight = state.highlighted_notes[black_keys[i].note_number];
             DrawRectangleRec(black_keys[i].rect, highlight ? GREEN : BLACK);
         }
     }
@@ -162,24 +199,34 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
     UNUSED(handle);
     UNUSED(instance);
 
-    // @ToDo: Device won't send MIM_CLOSE message when disconnected
+    if (msg == MIM_CLOSE) {
+        // @ToDo: Device won't send MIM_CLOSE message when disconnected
+    } else if (msg != MIM_DATA) return;
     
-    if (msg == MIM_DATA) {
-        unsigned int midi_message = arg0 & 0xFF;
-        unsigned int note = (arg0 >> 8) & 0xFF;
+    unsigned int midi_message = arg0 & 0xFF;
+    unsigned int note = (arg0 >> 8) & 0xFF;
     
-        int index = note - 48;
-        if (midi_message == NOTE_ON) {
-            if (index >= 0 && index < MIDI_FULL_LEN) {
-                g_log_message = "Highlighting note";
-                g_highlighted_notes[index] = true;
-            } else {
-                g_log_message = "Current note is outside the visible range";
+    int index = note - NOTE_OFFSET;
+    if (midi_message == NOTE_ON) {
+        if (index >= 0 && index < MIDI_FULL_LEN) {
+            state.log_message = "Sending input...";
+            state.highlighted_notes[index] = true;
+
+            if (state.midi_keys_map[index] != 0) {
+                INPUT input = {0};
+                input.type = INPUT_KEYBOARD;
+                input.ki.wVk = (WORD) state.midi_keys_map[index];
+
+                SendInput(1, &input, sizeof(INPUT));
+                input.ki.dwFlags = KEYEVENTF_KEYUP;
+                SendInput(1, &input, sizeof(INPUT));
             }
         } else {
-            if (index >= 0 && index < MIDI_FULL_LEN) {
-                g_highlighted_notes[index] = false;
-            }
+            state.log_message = "Current note is outside the visible range";
+        }
+    } else if (midi_message == NOTE_OFF) {
+        if (index >= 0 && index < MIDI_FULL_LEN) {
+            state.highlighted_notes[index] = false;
         }
     }
 }
@@ -195,10 +242,12 @@ int main(int argc, char **argv)
     SetTargetFPS(FPS);
 
     HMIDIIN handle = 0;
-    g_open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
+    state.open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
+
+    load_default_config();
     
     while (!WindowShouldClose()) {
-        const int key_width = (int) (GetScreenWidth() * 0.028f);
+        const int key_width = (int) (GetScreenWidth() * 0.030f);
         const int key_padding = 5;
         
         Rectangle keyboard_rect = {0};
@@ -223,18 +272,18 @@ int main(int argc, char **argv)
         render_keyboard(keyboard_rect, key_width, key_padding);
         render_control_panel(control_panel_rect, 20, 4);
 
-        if (g_open_device_result != MMSYSERR_NOERROR) {
-            g_log_message = "Could not find MIDI device";
+        if (state.open_device_result != MMSYSERR_NOERROR) {
+            state.log_message = "Could not find MIDI device";
             
-            g_open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
-        } else if (g_midi_device_started == false) {
-            g_log_message = "MIDI device connected!";
+            state.open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
+        } else if (state.midi_device_started == false) {
+            state.log_message = "MIDI device connected!";
             
             midiInStart(handle);
-            g_midi_device_started = true;
+            state.midi_device_started = true;
         }
         
-        draw_text_centered(g_log_message, (int) text_center.x, (int) text_center.y, 30);
+        draw_text_centered(state.log_message, (int) text_center.x, (int) text_center.y, 30);
 
         EndDrawing();
     }

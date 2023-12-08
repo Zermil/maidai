@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <raylib/raylib.h>
 #include <raylib/raymath.h>
@@ -27,6 +28,8 @@
 #define NOTE_ON 0x90
 #define NOTE_OFF 0x80
 #define NOTE_OFFSET 48
+
+#define DEFAULT_CONFIG 0
 
 #define internal static
 #define global static
@@ -93,21 +96,21 @@ internal Color get_colour_from_state(int note_number, Color color)
     return(color);
 }
 
-internal void load_default_config()
+internal void set_current_config(const char *keys, int keys_size, int offset)
 {
-    // @Note: For people that are confused:
-    // This is the default config in FF14 when playing an instrument, default
-    // keybindings etc.
-    const char *keys = "Q2W3ER5T6Y7UI";
-    for (int i = 0; i < 12; ++i) {
-        state.midi_keys_map[i + 12] = keys[i];
+    for (int i = 0; i < keys_size; ++i) {
+        state.midi_keys_map[i + offset] = keys[i];
     }
 }
 
-internal void handle_note_click(int note_number)
+internal void load_config(int config_id)
 {
-    printf("[KEY_%d]\n", note_number);
-    state.active_key = note_number;
+    switch (config_id) {
+        case DEFAULT_CONFIG: {
+            const char *keys = "Q2W3ER5T6Y7UI";
+            set_current_config(keys, (int) strlen(keys), 12);
+        } break;
+    }
 }
 
 // @Note: By default we render 'regular/extended' ffxiv keyboard, at some point
@@ -156,7 +159,7 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
         
         if (CheckCollisionPointRec(GetMousePosition(), white_keys[i].rect) && !black_key_collision) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                handle_note_click(white_keys[i].note_number);
+                state.active_key = white_keys[i].note_number;
             }
             
             DrawRectangleRec(white_keys[i].rect, RED);
@@ -171,7 +174,7 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
 
         if (collision || (collision && white_key_collision)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                handle_note_click(black_keys[i].note_number);
+                state.active_key = black_keys[i].note_number;
             }
 
             DrawRectangleRec(black_keys[i].rect, RED);
@@ -198,7 +201,7 @@ internal void render_control_panel(Rectangle rect, int button_padding, int num_b
     for (int i = 0; i < num_buttons; ++i) {
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                printf("[PRESET_BUTTON]\n");
+                load_config(i);
             }
             
             DrawRectangleRounded(button_rect, 0.4f, 0, { 70, 70, 70, 255 });
@@ -238,9 +241,9 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
                 INPUT input = {0};
                 input.type = INPUT_KEYBOARD;
                 input.ki.wVk = (WORD) state.midi_keys_map[index];
-
+                
                 SendInput(1, &input, sizeof(INPUT));
-                input.ki.dwFlags = KEYEVENTF_KEYUP;
+                input.ki.dwFlags |= KEYEVENTF_KEYUP;
                 SendInput(1, &input, sizeof(INPUT));
             }
         } else {
@@ -269,8 +272,8 @@ int main(int argc, char **argv)
     HMIDIIN handle = 0;
     state.open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
 
-    load_default_config();
-    
+    load_config(DEFAULT_CONFIG);
+        
     while (!WindowShouldClose()) {
         const int key_width = (int) (GetScreenWidth() * 0.030f);
         const int key_padding = 5;
@@ -291,8 +294,14 @@ int main(int argc, char **argv)
         text_center.x = keyboard_rect.width/2.0f;
         text_center.y = (GetScreenHeight() - keyboard_rect.height)/2.0f;
 
-        if (IsKeyPressed(KEY_ESCAPE)) {
-            state.active_key = -1;
+        if (IsKeyPressed(KEY_ESCAPE)) state.active_key = -1;
+        if (state.active_key != -1) {
+            int key_code = GetKeyPressed();
+            
+            if (key_code >= 32 && key_code <= 126) {
+                state.midi_keys_map[state.active_key] = key_code;
+                state.active_key = -1;
+            }
         }
         
         BeginDrawing();

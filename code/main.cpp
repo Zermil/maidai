@@ -42,11 +42,15 @@
 
 struct Note {
     Rectangle rect;
+    Color color;
+    
     int note_number;
 };
 
 struct Internal_State {
     const char *log_message;
+
+    int active_key = -1; // @Note: Means no active key at startup
     
     bool highlighted_notes[MIDI_FULL_LEN];
     int midi_keys_map[MIDI_FULL_LEN];
@@ -79,13 +83,31 @@ internal bool collides_with_keys(Note *keys, size_t size)
     return(false);
 }
 
+// @Robustness: Find a better way of figuring out the colour, possible
+// refactor of 'render_keyboard()'
+internal Color get_colour_from_state(int note_number, Color color)
+{
+    if (state.highlighted_notes[note_number]) return(GREEN);
+    if (state.active_key == note_number) return(ORANGE);
+
+    return(color);
+}
+
 internal void load_default_config()
 {
+    // @Note: For people that are confused:
+    // This is the default config in FF14 when playing an instrument, default
+    // keybindings etc.
     const char *keys = "Q2W3ER5T6Y7UI";
-
     for (int i = 0; i < 12; ++i) {
         state.midi_keys_map[i + 12] = keys[i];
     }
+}
+
+internal void handle_note_click(int note_number)
+{
+    printf("[KEY_%d]\n", note_number);
+    state.active_key = note_number;
 }
 
 // @Note: By default we render 'regular/extended' ffxiv keyboard, at some point
@@ -105,7 +127,7 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
     black_key.y = rect.y;
 
     // @Note: We need to decouple rendering from logic
-    // handling, because rectangles overlap each-other
+    // handling, because rectangles overlap each-other.
     // I wanted to solve this problem with z-index or something similar
     // but raylib (afaik) doesn't provide anything like that (nor layers etc.)
     Note black_keys[MIDI_LEN - 1] = {0};
@@ -114,12 +136,14 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
     for (int i = 0, note_number = 0; i < MIDI_LEN; ++i) {
         white_keys[i].rect = white_key;
         white_keys[i].note_number = note_number;
+        white_keys[i].color = get_colour_from_state(note_number, WHITE);
         note_number += 1;
         
         // @Robustness: Change this, it's just ugly.
         if (i != MIDI_LEN - 1 && (i % 7 != 6 && i % 7 != 2)) {
             black_keys[i].rect = black_key;
             black_keys[i].note_number = note_number;
+            black_keys[i].color = get_colour_from_state(note_number, BLACK);
             note_number += 1;
         }
         
@@ -131,14 +155,13 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
         bool black_key_collision = collides_with_keys(black_keys, MIDI_LEN - 1);
         
         if (CheckCollisionPointRec(GetMousePosition(), white_keys[i].rect) && !black_key_collision) {
-            DrawRectangleRec(white_keys[i].rect, RED);
-
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                printf("[WHITE_KEY_%d]\n", white_keys[i].note_number);
+                handle_note_click(white_keys[i].note_number);
             }
+            
+            DrawRectangleRec(white_keys[i].rect, RED);
         } else {
-            bool highlight = state.highlighted_notes[white_keys[i].note_number];
-            DrawRectangleRec(white_keys[i].rect, highlight ? GREEN : WHITE);
+            DrawRectangleRec(white_keys[i].rect, white_keys[i].color);
         }
     }
 
@@ -147,14 +170,13 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
         bool collision = CheckCollisionPointRec(GetMousePosition(), black_keys[i].rect);
 
         if (collision || (collision && white_key_collision)) {
-            DrawRectangleRec(black_keys[i].rect, RED);
-
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                printf("[BLACK_KEY_%d]\n", black_keys[i].note_number);
+                handle_note_click(black_keys[i].note_number);
             }
+
+            DrawRectangleRec(black_keys[i].rect, RED);
         } else {
-            bool highlight = state.highlighted_notes[black_keys[i].note_number];
-            DrawRectangleRec(black_keys[i].rect, highlight ? GREEN : BLACK);
+            DrawRectangleRec(black_keys[i].rect, black_keys[i].color);
         }
     }
 }
@@ -175,11 +197,11 @@ internal void render_control_panel(Rectangle rect, int button_padding, int num_b
 
     for (int i = 0; i < num_buttons; ++i) {
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
-            DrawRectangleRounded(button_rect, 0.4f, 0, { 70, 70, 70, 255 });
-
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 printf("[PRESET_BUTTON]\n");
             }
+            
+            DrawRectangleRounded(button_rect, 0.4f, 0, { 70, 70, 70, 255 });
         } else {
             DrawRectangleRounded(button_rect, 0.4f, 0, { 50, 50, 50, 255 });
         }
@@ -237,8 +259,11 @@ int main(int argc, char **argv)
     UNUSED(argv);
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
+    
     InitWindow(WIDTH, HEIGHT, "A Window");
-    SetWindowMinSize(MIN_WIDTH, MIN_HEIGHT);    
+    SetWindowMinSize(MIN_WIDTH, MIN_HEIGHT);
+    SetExitKey(0);
+    
     SetTargetFPS(FPS);
 
     HMIDIIN handle = 0;
@@ -265,6 +290,10 @@ int main(int argc, char **argv)
         Vector2 text_center = {0};
         text_center.x = keyboard_rect.width/2.0f;
         text_center.y = (GetScreenHeight() - keyboard_rect.height)/2.0f;
+
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            state.active_key = -1;
+        }
         
         BeginDrawing();
         ClearBackground({ 20, 20, 20, 255 });

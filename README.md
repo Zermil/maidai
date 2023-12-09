@@ -4,6 +4,8 @@ Better alternative for a MIDI translator, simple program that allows you to use 
 
 This project uses a fantastic library [raylib](https://www.raylib.com/) for most (if not all) of the rendering.
 
+![maidai](./img/maidai.png)
+
 ## Compile/Build
 
 Make sure to change `MSVC_PATH` in the build script.

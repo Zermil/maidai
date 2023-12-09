@@ -6,6 +6,7 @@
 #include <raylib/raymath.h>
 
 #define UNUSED(x) ((void)(x))
+#define ARR_SZ(arr) (sizeof(arr)/sizeof(arr[0]))
 
 // @Note: Please, if anyone has a better solution for this _without namespaces_
 // I'll gladly take it
@@ -195,7 +196,7 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
     render_set_of_keys(rect, black_keys, BLACK_KEYS_LEN, key_width, key_padding);
 }
 
-internal void render_control_panel(Rectangle rect, int button_padding, int num_buttons)
+internal void render_control_panel(Rectangle rect, int button_padding)
 {
     DrawRectangleRec(rect, { 25, 25, 25, 255 });
 
@@ -209,7 +210,9 @@ internal void render_control_panel(Rectangle rect, int button_padding, int num_b
     text_center.x = button_rect.x + button_rect.width/2.0f;
     text_center.y = button_rect.y + button_rect.height/2.0f;
 
-    for (int i = 0; i < num_buttons; ++i) {
+    const char *presets[] = { "default", "genshin", "custom_1", "custom_2" };
+    
+    for (int i = 0; i < ARR_SZ(presets); ++i) {
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 load_config(i);
@@ -220,8 +223,8 @@ internal void render_control_panel(Rectangle rect, int button_padding, int num_b
         } else {
             DrawRectangleRounded(button_rect, 0.4f, 0, { 50, 50, 50, 255 });
         }
-        
-        draw_text_centered("preset", (int) text_center.x, (int) text_center.y, 23);
+
+        draw_text_centered(presets[i], (int) text_center.x, (int) text_center.y, 23);
         
         button_rect.y += button_rect.height + button_padding;
         text_center.y = button_rect.y + button_rect.height/2.0f;
@@ -331,7 +334,7 @@ int main(int argc, char **argv)
         ClearBackground({ 20, 20, 20, 255 });
         
         render_keyboard(keyboard_rect, key_width, key_padding);
-        render_control_panel(control_panel_rect, 20, 4);
+        render_control_panel(control_panel_rect, 20);
 
         if (state.open_device_result != MMSYSERR_NOERROR) {
             state.midi_state_message = "MIDI device not connected";

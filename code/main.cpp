@@ -7,7 +7,7 @@
 
 #define UNUSED(x) ((void)(x))
 
-// @Note: Please, if anyone has a solution for this, _without namespaces_
+// @Note: Please, if anyone has a better solution for this _without namespaces_
 // I'll gladly take it
 #if defined(_WIN32)
 #define NOMINMAX
@@ -40,14 +40,16 @@
 #define MIN_HEIGHT 700
 #define FPS 60
 
-#define MIDI_LEN 22 // @Note: Length in white keys
-#define MIDI_FULL_LEN 37
+#define WHITE_KEYS_LEN 22
+#define BLACK_KEYS_LEN 15
+#define MIDI_FULL_LEN (WHITE_KEYS_LEN + BLACK_KEYS_LEN)
 
 struct Note {
     Rectangle rect;
     Color color;
     
     int note_number;
+    bool hovered;
 };
 
 struct Internal_State {
@@ -71,19 +73,6 @@ internal void draw_text_centered(const char *text, int x, int y, int font_size)
 {
     int text_width = MeasureText(text, font_size);
     DrawText(text, x - text_width/2, y - font_size/2, font_size, WHITE);
-}
-
-// @Note: Yes this is linear, we have 15 black keys/22 white keys, this is not a performance bottle-neck as CPUs are fast.
-// Feel free to change it if you have other, better ideas though.
-internal bool collides_with_keys(Note *keys, size_t size)
-{
-    for (size_t i = 0; i < size; ++i) {
-        if (CheckCollisionPointRec(GetMousePosition(), keys[i].rect)) {
-            return(true);
-        }
-    }
-
-    return(false);
 }
 
 // @Robustness: Find a better way of figuring out the colour, possible
@@ -113,6 +102,38 @@ internal void load_config(int config_id)
     }
 }
 
+internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int key_width, int key_padding)
+{
+    Rectangle tooltip = {0};
+    tooltip.width = key_width - key_padding*2.0f;
+    tooltip.height = rect.height * 0.25f;
+    
+    for (int i = 0; i < size; ++i) {        
+        if (keys[i].hovered) {
+            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                state.active_key = keys[i].note_number;
+            }
+            
+            DrawRectangleRec(keys[i].rect, RED);
+        } else {
+            DrawRectangleRec(keys[i].rect, keys[i].color);
+        }
+
+        if (state.midi_keys_map[keys[i].note_number] != 0) {
+            tooltip.x = keys[i].rect.x + key_padding;
+            tooltip.y = rect.y + keys[i].rect.height - tooltip.height - key_padding;
+            DrawRectangleRounded(tooltip, 0.4f, 0, { 50, 50, 50, 255 });
+
+            Vector2 text_center = {0};
+            text_center.x = tooltip.x + tooltip.width / 2.0f;
+            text_center.y = tooltip.y + tooltip.height / 2.0f;
+
+            const char buff[2] = { (char) state.midi_keys_map[keys[i].note_number], 0 };
+            draw_text_centered(buff, (int) text_center.x, (int) text_center.y, 18);
+        }
+    }
+}
+
 // @Note: By default we render 'regular/extended' ffxiv keyboard, at some point
 // in the future we might generalize it to more/less keys.
 internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
@@ -129,59 +150,47 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
     black_key.x = (key_width + key_padding)/2.0f;
     black_key.y = rect.y;
 
-    // @Note: We need to decouple rendering from logic
+    // @Note: I needed to decouple rendering from logic
     // handling, because rectangles overlap each-other.
     // I wanted to solve this problem with z-index or something similar
     // but raylib (afaik) doesn't provide anything like that (nor layers etc.)
-    Note black_keys[MIDI_LEN - 1] = {0};
-    Note white_keys[MIDI_LEN] = {0};
+    Note white_keys[WHITE_KEYS_LEN] = {0};
+    Note black_keys[BLACK_KEYS_LEN] = {0};
+    bool hovered = false;
     
-    for (int i = 0, note_number = 0; i < MIDI_LEN; ++i) {
+    for (int i = 0, j = 0, note_number = 0; i < WHITE_KEYS_LEN; ++i) {
         white_keys[i].rect = white_key;
         white_keys[i].note_number = note_number;
         white_keys[i].color = get_colour_from_state(note_number, WHITE);
         note_number += 1;
         
         // @Robustness: Change this, it's just ugly.
-        if (i != MIDI_LEN - 1 && (i % 7 != 6 && i % 7 != 2)) {
-            black_keys[i].rect = black_key;
-            black_keys[i].note_number = note_number;
-            black_keys[i].color = get_colour_from_state(note_number, BLACK);
+        if (i != WHITE_KEYS_LEN - 1 && (i % 7 != 6 && i % 7 != 2)) {
+            black_keys[j].rect = black_key;
+            black_keys[j].note_number = note_number;
+            black_keys[j].color = get_colour_from_state(note_number, BLACK);
             note_number += 1;
+
+            // @Note: This is some of the worst code I've ever written...
+            if (!hovered && CheckCollisionPointRec(GetMousePosition(), black_keys[j].rect)) {
+                hovered = true;
+                black_keys[j].hovered = true;
+            }
+            
+            j += 1;
+        }
+
+        if (!hovered && CheckCollisionPointRec(GetMousePosition(), white_keys[i].rect)) {
+            hovered = true;
+            white_keys[i].hovered = true;
         }
         
         white_key.x += key_width + key_padding;
         black_key.x += key_width + key_padding;
     }
 
-    for (int i = 0; i < MIDI_LEN; ++i) {
-        bool black_key_collision = collides_with_keys(black_keys, MIDI_LEN - 1);
-        
-        if (CheckCollisionPointRec(GetMousePosition(), white_keys[i].rect) && !black_key_collision) {
-            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                state.active_key = white_keys[i].note_number;
-            }
-            
-            DrawRectangleRec(white_keys[i].rect, RED);
-        } else {
-            DrawRectangleRec(white_keys[i].rect, white_keys[i].color);
-        }
-    }
-
-    for (int i = 0; i < MIDI_LEN - 1; ++i) {
-        bool white_key_collision = collides_with_keys(white_keys, MIDI_LEN);
-        bool collision = CheckCollisionPointRec(GetMousePosition(), black_keys[i].rect);
-
-        if (collision || (collision && white_key_collision)) {
-            if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                state.active_key = black_keys[i].note_number;
-            }
-
-            DrawRectangleRec(black_keys[i].rect, RED);
-        } else {
-            DrawRectangleRec(black_keys[i].rect, black_keys[i].color);
-        }
-    }
+    render_set_of_keys(rect, white_keys, WHITE_KEYS_LEN, key_width, key_padding);
+    render_set_of_keys(rect, black_keys, BLACK_KEYS_LEN, key_width, key_padding);
 }
 
 internal void render_control_panel(Rectangle rect, int button_padding, int num_buttons)
@@ -202,6 +211,7 @@ internal void render_control_panel(Rectangle rect, int button_padding, int num_b
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 load_config(i);
+                state.log_message = "Loaded config";
             }
             
             DrawRectangleRounded(button_rect, 0.4f, 0, { 70, 70, 70, 255 });
@@ -225,7 +235,7 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
     UNUSED(instance);
 
     if (msg == MIM_CLOSE) {
-        // @ToDo: Device won't send MIM_CLOSE message when disconnected
+        // @ToDo: Device won't send MIM_CLOSE message when disconnected.
     } else if (msg != MIM_DATA) return;
     
     unsigned int midi_message = arg0 & 0xFF;
@@ -234,7 +244,7 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
     int index = note - NOTE_OFFSET;
     if (midi_message == NOTE_ON) {
         if (index >= 0 && index < MIDI_FULL_LEN) {
-            state.log_message = "Sending input...";
+            state.log_message = "Sending input";
             state.highlighted_notes[index] = true;
 
             if (state.midi_keys_map[index] != 0) {
@@ -275,11 +285,11 @@ int main(int argc, char **argv)
     load_config(DEFAULT_CONFIG);
         
     while (!WindowShouldClose()) {
-        const int key_width = (int) (GetScreenWidth() * 0.030f);
+        const int key_width = (int) (GetScreenWidth() * 0.032f);
         const int key_padding = 5;
         
         Rectangle keyboard_rect = {0};
-        keyboard_rect.width = (float) (MIDI_LEN * (key_width + key_padding) - key_padding);
+        keyboard_rect.width = (float) (WHITE_KEYS_LEN * (key_width + key_padding) - key_padding);
         keyboard_rect.height = 250;
         keyboard_rect.x = 0;
         keyboard_rect.y = GetScreenHeight() - keyboard_rect.height;
@@ -294,13 +304,21 @@ int main(int argc, char **argv)
         text_center.x = keyboard_rect.width/2.0f;
         text_center.y = (GetScreenHeight() - keyboard_rect.height)/2.0f;
 
-        if (IsKeyPressed(KEY_ESCAPE)) state.active_key = -1;
-        if (state.active_key != -1) {
-            int key_code = GetKeyPressed();
+        if (IsKeyPressed(KEY_ESCAPE)) {
+            if (state.active_key != -1) {
+                state.midi_keys_map[state.active_key] = 0;
+            }
             
-            if (key_code >= 32 && key_code <= 126) {
+            state.active_key = -1;
+        } else if (state.active_key != -1) {
+            int key_code = GetKeyPressed();
+
+            // @ToDo: At some point allow mapping to 'F1' and other keys.
+            if (key_code >= 33 && key_code <= 126) {
                 state.midi_keys_map[state.active_key] = key_code;
                 state.active_key = -1;
+            } else if (key_code != 0) {
+                state.log_message = "Only ASCII keys are allowed to be mapped for now";
             }
         }
         

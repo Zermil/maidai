@@ -49,11 +49,12 @@ struct Note {
     Color color;
     
     int note_number;
-    bool hovered;
+    bool hovered; // @Robustness: We should find a way to get rid of this boolean
 };
 
 struct Internal_State {
     const char *log_message;
+    const char *midi_state_message;
 
     int active_key = -1; // @Note: Means no active key at startup
     
@@ -112,6 +113,7 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
         if (keys[i].hovered) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 state.active_key = keys[i].note_number;
+                state.log_message = "Press ASCII key to finish mapping";
             }
             
             DrawRectangleRec(keys[i].rect, RED);
@@ -128,8 +130,8 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
             text_center.x = tooltip.x + tooltip.width / 2.0f;
             text_center.y = tooltip.y + tooltip.height / 2.0f;
 
-            const char buff[2] = { (char) state.midi_keys_map[keys[i].note_number], 0 };
-            draw_text_centered(buff, (int) text_center.x, (int) text_center.y, 18);
+            const char text[2] = { (char) state.midi_keys_map[keys[i].note_number], 0 };
+            draw_text_centered(text, (int) text_center.x, (int) text_center.y, 18);
         }
     }
 }
@@ -244,7 +246,6 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
     int index = note - NOTE_OFFSET;
     if (midi_message == NOTE_ON) {
         if (index >= 0 && index < MIDI_FULL_LEN) {
-            state.log_message = "Sending input";
             state.highlighted_notes[index] = true;
 
             if (state.midi_keys_map[index] != 0) {
@@ -283,7 +284,9 @@ int main(int argc, char **argv)
     state.open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
 
     load_config(DEFAULT_CONFIG);
-        
+    state.midi_state_message = "MIDI device not connected";
+    state.log_message = "Select a piano key to begin mapping";
+    
     while (!WindowShouldClose()) {
         const int key_width = (int) (GetScreenWidth() * 0.032f);
         const int key_padding = 5;
@@ -307,6 +310,7 @@ int main(int argc, char **argv)
         if (IsKeyPressed(KEY_ESCAPE)) {
             if (state.active_key != -1) {
                 state.midi_keys_map[state.active_key] = 0;
+                state.log_message = "Key erased";
             }
             
             state.active_key = -1;
@@ -317,6 +321,7 @@ int main(int argc, char **argv)
             if (key_code >= 33 && key_code <= 126) {
                 state.midi_keys_map[state.active_key] = key_code;
                 state.active_key = -1;
+                state.log_message = "Key mapped";
             } else if (key_code != 0) {
                 state.log_message = "Only ASCII keys are allowed to be mapped for now";
             }
@@ -329,17 +334,17 @@ int main(int argc, char **argv)
         render_control_panel(control_panel_rect, 20, 4);
 
         if (state.open_device_result != MMSYSERR_NOERROR) {
-            state.log_message = "Could not find MIDI device";
-            
+            state.midi_state_message = "MIDI device not connected";
             state.open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
         } else if (state.midi_device_started == false) {
-            state.log_message = "MIDI device connected!";
-            
+            state.midi_state_message = "MIDI device connected";
             midiInStart(handle);
+            
             state.midi_device_started = true;
         }
         
         draw_text_centered(state.log_message, (int) text_center.x, (int) text_center.y, 30);
+        DrawText(state.midi_state_message, 10, 10, 22, WHITE);
 
         EndDrawing();
     }

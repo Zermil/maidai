@@ -254,14 +254,14 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
             if (state.midi_keys_map[index] != 0) {
                 INPUT input = {0};
                 input.type = INPUT_KEYBOARD;
-                input.ki.wVk = (WORD) state.midi_keys_map[index];
+                input.ki.wVk = VkKeyScanA((CHAR) state.midi_keys_map[index]);
                 
                 SendInput(1, &input, sizeof(INPUT));
                 input.ki.dwFlags |= KEYEVENTF_KEYUP;
                 SendInput(1, &input, sizeof(INPUT));
             }
         } else {
-            state.log_message = "Current note is outside the visible range";
+            state.log_message = "Note is outside the visible range";
         }
     } else if (midi_message == NOTE_OFF) {
         if (index >= 0 && index < MIDI_FULL_LEN) {
@@ -311,11 +311,16 @@ int main(int argc, char **argv)
         text_center.y = (GetScreenHeight() - keyboard_rect.height)/2.0f;
 
         if (IsKeyPressed(KEY_ESCAPE)) {
-            if (state.active_key != -1) {
-                state.midi_keys_map[state.active_key] = 0;
-                state.log_message = "Key erased";
+
+            if (state.active_key != -1) {            
+                if (state.midi_keys_map[state.active_key] != 0) {
+                    state.log_message = "Key unmapped";
+                } else {
+                    state.log_message = "Mapping stopped";
+                }
             }
             
+            state.midi_keys_map[state.active_key] = 0;
             state.active_key = -1;
         } else if (state.active_key != -1) {
             int key_code = GetKeyPressed();

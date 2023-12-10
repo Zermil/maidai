@@ -31,6 +31,7 @@
 #define NOTE_OFFSET 48
 
 #define DEFAULT_CONFIG 0
+#define GENSHIN_CONFIG 1
 
 #define internal static
 #define global static
@@ -87,13 +88,6 @@ internal Color get_colour_from_state(int note_number, Color color)
     return(color);
 }
 
-internal void set_current_config(const char *keys, int keys_size, int offset)
-{
-    for (int i = 0; i < keys_size; ++i) {
-        state.midi_keys_map[i + offset] = keys[i];
-    }
-}
-
 internal void load_config(int config_id)
 {
     for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
@@ -103,7 +97,19 @@ internal void load_config(int config_id)
     switch (config_id) {
         case DEFAULT_CONFIG: {
             const char *keys = "Q2W3ER5T6Y7UI";
-            set_current_config(keys, (int) strlen(keys), 12);
+            
+            for (size_t i = 0; i < strlen(keys); ++i) {
+                state.midi_keys_map[i + 12] = keys[i];
+            }
+        } break;
+
+        case GENSHIN_CONFIG: {
+            const char *keys = "QWERTYUASDFGHJZXCVBNM";
+            size_t indices[] = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36 };
+ 
+            for (size_t i = 0; i < ARR_SZ(indices); ++i) {
+                state.midi_keys_map[indices[i]] = keys[i];
+            }
         } break;
     }
 }
@@ -293,6 +299,10 @@ internal void check_midi_controller()
         state.midi_state_message = "MIDI device not connected";
         state.device_connected = false;
 
+        for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
+            state.highlighted_notes[i] = 0;
+        }
+        
         midiInStop(state.midi_handle);
         midiInClose(state.midi_handle);
     }

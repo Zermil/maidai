@@ -45,6 +45,8 @@
 #define BLACK_KEYS_LEN 15
 #define MIDI_FULL_LEN (WHITE_KEYS_LEN + BLACK_KEYS_LEN)
 
+#define BUFF_LEN 256
+
 struct Note {
     Rectangle rect;
     Color color;
@@ -96,6 +98,10 @@ internal void set_current_config(const char *keys, int keys_size, int offset)
 
 internal void load_config(int config_id)
 {
+    for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
+        state.midi_keys_map[i] = 0;
+    }
+    
     switch (config_id) {
         case DEFAULT_CONFIG: {
             const char *keys = "Q2W3ER5T6Y7UI";
@@ -131,7 +137,8 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
             text_center.x = tooltip.x + tooltip.width / 2.0f;
             text_center.y = tooltip.y + tooltip.height / 2.0f;
 
-            const char text[2] = { (char) state.midi_keys_map[keys[i].note_number], 0 };
+            // @Note: Workaround for raylib not having "DrawCharacter"
+            char text[2] = { (char) state.midi_keys_map[keys[i].note_number], 0 };
             draw_text_centered(text, (int) text_center.x, (int) text_center.y, 18);
         }
     }

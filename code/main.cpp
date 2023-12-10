@@ -64,7 +64,6 @@ struct Internal_State {
 
     bool device_connected;
     HMIDIIN midi_handle;
-    MMRESULT open_device_result;
 };
 
 // @Note: For all new programmers, I'm sorry but real life isn't how your CS professor wants it to be.
@@ -274,6 +273,56 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
     }
 }
 
+internal void check_midi_controller()
+{
+    // @ToDo: We're selecting the first connected device, we should
+    // give the user an option to select which device they want to
+    // select/map.
+        
+    // @ToDo: Proper error messages based on MMSYSERR.
+    MIDIINCAPS midi_info = {0};
+    MMRESULT open_device_result = midiInGetDevCaps(0, &midi_info, sizeof(MIDIINCAPS));
+    
+    if (open_device_result == MMSYSERR_NOERROR && !state.device_connected) {
+        state.midi_state_message = "MIDI device connected";
+        state.device_connected = true;
+        
+        midiInOpen(&state.midi_handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
+        midiInStart(state.midi_handle);
+    } else if (open_device_result != MMSYSERR_NOERROR) {
+        state.midi_state_message = "MIDI device not connected";
+        state.device_connected = false;
+
+        midiInStop(state.midi_handle);
+        midiInClose(state.midi_handle);
+    }
+}
+
+internal void check_key_assignment()
+{
+    if (IsKeyPressed(KEY_ESCAPE) && state.active_key != -1) {
+        if (state.midi_keys_map[state.active_key] != 0) {
+            state.log_message = "Key unmapped";
+            state.midi_keys_map[state.active_key] = 0;
+        } else {
+            state.log_message = "Mapping stopped";
+        }
+        
+        state.active_key = -1;
+    } else if (state.active_key != -1) {
+        int key_code = GetKeyPressed();
+
+        // @ToDo: At some point allow mapping to 'F1' and other keys.
+        if (key_code >= 33 && key_code <= 126) {
+            state.midi_keys_map[state.active_key] = key_code;
+            state.active_key = -1;
+            state.log_message = "Key mapped";
+        } else if (key_code != 0) {
+            state.log_message = "Only ASCII keys are allowed to be mapped for now";
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -311,59 +360,15 @@ int main(int argc, char **argv)
         text_center.x = keyboard_rect.width/2.0f;
         text_center.y = (GetScreenHeight() - keyboard_rect.height)/2.0f;
 
-        if (IsKeyPressed(KEY_ESCAPE)) {
+        check_key_assignment();
+        check_midi_controller();
 
-            if (state.active_key != -1) {            
-                if (state.midi_keys_map[state.active_key] != 0) {
-                    state.log_message = "Key unmapped";
-                } else {
-                    state.log_message = "Mapping stopped";
-                }
-            }
-            
-            state.midi_keys_map[state.active_key] = 0;
-            state.active_key = -1;
-        } else if (state.active_key != -1) {
-            int key_code = GetKeyPressed();
-
-            // @ToDo: At some point allow mapping to 'F1' and other keys.
-            if (key_code >= 33 && key_code <= 126) {
-                state.midi_keys_map[state.active_key] = key_code;
-                state.active_key = -1;
-                state.log_message = "Key mapped";
-            } else if (key_code != 0) {
-                state.log_message = "Only ASCII keys are allowed to be mapped for now";
-            }
-        }
-        
         BeginDrawing();
         ClearBackground({ 20, 20, 20, 255 });
         
         render_keyboard(keyboard_rect, key_width, key_padding);
         render_control_panel(control_panel_rect, 20);
 
-        // @ToDo: We're selecting the first connected device, we should
-        // give the user an option to select which device they want to
-        // select/map.
-        
-        // @ToDo: Proper error messages based on MMSYSERR.
-        MIDIINCAPS midi_info = {0};
-        state.open_device_result = midiInGetDevCaps(0, &midi_info, sizeof(MIDIINCAPS));
-        
-        if (state.open_device_result == MMSYSERR_NOERROR && !state.device_connected) {
-            state.midi_state_message = "MIDI device connected";
-            state.device_connected = true;
-            
-            midiInOpen(&state.midi_handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
-            midiInStart(state.midi_handle);
-        } else if (state.open_device_result != MMSYSERR_NOERROR) {
-            state.midi_state_message = "MIDI device not connected";
-            state.device_connected = false;
-
-            midiInStop(state.midi_handle);
-            midiInClose(state.midi_handle);
-        }
-        
         draw_text_centered(state.log_message, (int) text_center.x, (int) text_center.y, 30);
         DrawText(state.midi_state_message, 10, 10, 22, WHITE);
 

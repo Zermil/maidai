@@ -45,8 +45,6 @@
 #define BLACK_KEYS_LEN 15
 #define MIDI_FULL_LEN (WHITE_KEYS_LEN + BLACK_KEYS_LEN)
 
-#define BUFF_LEN 256
-
 struct Note {
     Rectangle rect;
     Color color;
@@ -63,8 +61,9 @@ struct Internal_State {
     
     bool highlighted_notes[MIDI_FULL_LEN];
     int midi_keys_map[MIDI_FULL_LEN];
-    
-    bool midi_device_started;
+
+    bool device_connected;
+    HMIDIIN midi_handle;
     MMRESULT open_device_result;
 };
 
@@ -245,10 +244,8 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
     UNUSED(arg1);
     UNUSED(handle);
     UNUSED(instance);
-
-    if (msg == MIM_CLOSE) {
-        // @ToDo: Device won't send MIM_CLOSE message when disconnected.
-    } else if (msg != MIM_DATA) return;
+    
+    if (msg != MIM_DATA) return;
     
     unsigned int midi_message = arg0 & 0xFF;
     unsigned int note = (arg0 >> 8) & 0xFF;
@@ -281,7 +278,7 @@ int main(int argc, char **argv)
 {
     UNUSED(argc);
     UNUSED(argv);
-
+    
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     
     InitWindow(WIDTH, HEIGHT, "A Window");
@@ -289,9 +286,6 @@ int main(int argc, char **argv)
     SetExitKey(0);
     
     SetTargetFPS(FPS);
-
-    HMIDIIN handle = 0;
-    state.open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
 
     load_config(DEFAULT_CONFIG);
     state.midi_state_message = "MIDI device not connected";
@@ -348,14 +342,26 @@ int main(int argc, char **argv)
         render_keyboard(keyboard_rect, key_width, key_padding);
         render_control_panel(control_panel_rect, 20);
 
-        if (state.open_device_result != MMSYSERR_NOERROR) {
-            state.midi_state_message = "MIDI device not connected";
-            state.open_device_result = midiInOpen(&handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
-        } else if (state.midi_device_started == false) {
+        // @ToDo: We're selecting the first connected device, we should
+        // give the user an option to select which device they want to
+        // select/map.
+        
+        // @ToDo: Proper error messages based on MMSYSERR.
+        MIDIINCAPS midi_info = {0};
+        state.open_device_result = midiInGetDevCaps(0, &midi_info, sizeof(MIDIINCAPS));
+        
+        if (state.open_device_result == MMSYSERR_NOERROR && !state.device_connected) {
             state.midi_state_message = "MIDI device connected";
-            midiInStart(handle);
+            state.device_connected = true;
             
-            state.midi_device_started = true;
+            midiInOpen(&state.midi_handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
+            midiInStart(state.midi_handle);
+        } else if (state.open_device_result != MMSYSERR_NOERROR) {
+            state.midi_state_message = "MIDI device not connected";
+            state.device_connected = false;
+
+            midiInStop(state.midi_handle);
+            midiInClose(state.midi_handle);
         }
         
         draw_text_centered(state.log_message, (int) text_center.x, (int) text_center.y, 30);
@@ -364,8 +370,8 @@ int main(int argc, char **argv)
         EndDrawing();
     }
 
-    midiInStop(handle);
-    midiInClose(handle);
+    midiInStop(state.midi_handle);
+    midiInClose(state.midi_handle);
     CloseWindow();
     
     return 0;

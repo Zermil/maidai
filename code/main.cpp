@@ -30,9 +30,6 @@
 #define NOTE_OFF 0x80
 #define NOTE_OFFSET 48
 
-#define DEFAULT_CONFIG 0
-#define GENSHIN_CONFIG 1
-
 #define internal static
 #define global static
 
@@ -45,6 +42,11 @@
 #define WHITE_KEYS_LEN 22
 #define BLACK_KEYS_LEN 15
 #define MIDI_FULL_LEN (WHITE_KEYS_LEN + BLACK_KEYS_LEN)
+
+enum Config_Type {
+    DEFAULT = 0,
+    GENSHIN,
+};
 
 struct Note {
     Rectangle rect;
@@ -88,14 +90,14 @@ internal Color get_colour_from_state(int note_number, Color color)
     return(color);
 }
 
-internal void load_config(int config_id)
+internal void load_config(Config_Type config_id)
 {
     for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
         state.midi_keys_map[i] = 0;
     }
     
     switch (config_id) {
-        case DEFAULT_CONFIG: {
+        case DEFAULT: {
             const char *keys = "Q2W3ER5T6Y7UI";
             
             for (size_t i = 0; i < strlen(keys); ++i) {
@@ -103,7 +105,7 @@ internal void load_config(int config_id)
             }
         } break;
 
-        case GENSHIN_CONFIG: {
+        case GENSHIN: {
             const char *keys = "QWERTYUASDFGHJZXCVBNM";
             size_t indices[] = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36 };
  
@@ -127,7 +129,11 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
                 state.log_message = "Press ASCII key to finish mapping";
             }
             
-            DrawRectangleRec(keys[i].rect, RED);
+            if (!state.highlighted_notes[keys[i].note_number]) {
+                DrawRectangleRec(keys[i].rect, RED);
+            } else {
+                DrawRectangleRec(keys[i].rect, keys[i].color);
+            }
         } else {
             DrawRectangleRec(keys[i].rect, keys[i].color);
         }
@@ -226,7 +232,7 @@ internal void render_control_panel(Rectangle rect, int button_padding)
     for (int i = 0; i < ARR_SZ(presets); ++i) {
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                load_config(i);
+                load_config((Config_Type) i);
                 state.log_message = "Loaded config";
             }
             
@@ -346,7 +352,7 @@ int main(int argc, char **argv)
     
     SetTargetFPS(FPS);
 
-    load_config(DEFAULT_CONFIG);
+    load_config(DEFAULT);
     state.midi_state_message = "MIDI device not connected";
     state.log_message = "Select a piano key to begin mapping";
     

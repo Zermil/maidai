@@ -123,6 +123,8 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
     tooltip.height = rect.height * 0.25f;
     
     for (int i = 0; i < size; ++i) {        
+        Color c = keys[i].color;
+        
         if (keys[i].hovered) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 state.active_key = keys[i].note_number;
@@ -130,13 +132,11 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
             }
             
             if (!state.highlighted_notes[keys[i].note_number]) {
-                DrawRectangleRec(keys[i].rect, RED);
-            } else {
-                DrawRectangleRec(keys[i].rect, keys[i].color);
+                c = RED;
             }
-        } else {
-            DrawRectangleRec(keys[i].rect, keys[i].color);
         }
+        
+        DrawRectangleRec(keys[i].rect, c);
 
         if (state.midi_keys_map[keys[i].note_number] != 0) {
             tooltip.x = keys[i].rect.x + key_padding;

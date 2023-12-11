@@ -154,8 +154,7 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
     }
 }
 
-// @Note: By default we render 'regular/extended' ffxiv keyboard, at some point
-// in the future we might generalize it to more/less keys.
+// @Note: By default we render 'regular/extended' ffxiv keyboard.
 internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
 {
     Rectangle white_key = {0};
@@ -293,15 +292,17 @@ internal void check_midi_controller()
         
     // @ToDo: Proper error messages based on MMSYSERR.
     MIDIINCAPS midi_info = {0};
-    MMRESULT open_device_result = midiInGetDevCaps(0, &midi_info, sizeof(MIDIINCAPS));
+    MMRESULT device_result = midiInGetDevCaps(0, &midi_info, sizeof(MIDIINCAPS));
     
-    if (open_device_result == MMSYSERR_NOERROR && !state.device_connected) {
-        state.midi_state_message = "MIDI device connected";
-        state.device_connected = true;
+    if (device_result == MMSYSERR_NOERROR && !state.device_connected) {
+        device_result = midiInOpen(&state.midi_handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
         
-        midiInOpen(&state.midi_handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
-        midiInStart(state.midi_handle);
-    } else if (open_device_result != MMSYSERR_NOERROR) {
+        if (device_result == MMSYSERR_NOERROR) {
+            state.midi_state_message = "MIDI device connected";
+            state.device_connected = true;
+            midiInStart(state.midi_handle);
+        }
+    } else if (device_result != MMSYSERR_NOERROR) {
         state.midi_state_message = "MIDI device not connected";
         state.device_connected = false;
 

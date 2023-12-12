@@ -5,6 +5,8 @@
 #include <raylib/raylib.h>
 #include <raylib/raymath.h>
 
+#include "./font.h"
+
 #define UNUSED(x) ((void)(x))
 #define ARR_SZ(arr) (sizeof(arr)/sizeof(arr[0]))
 
@@ -58,7 +60,6 @@ struct Note {
 
 struct Internal_State {
     const char *log_message;
-    const char *midi_state_message;
 
     int active_key = -1; // @Note: Means no active key at startup
     
@@ -67,6 +68,8 @@ struct Internal_State {
 
     bool device_connected;
     HMIDIIN midi_handle;
+
+    Font font;
 };
 
 // @Note: For all new programmers, I'm sorry but real life isn't how your CS professor wants it to be.
@@ -76,8 +79,8 @@ global Internal_State state = {0};
 
 internal void draw_text_centered(const char *text, int x, int y, int font_size)
 {
-    int text_width = MeasureText(text, font_size);
-    DrawText(text, x - text_width/2, y - font_size/2, font_size, WHITE);
+    Vector2 text_width = MeasureTextEx(state.font, text, (float) font_size, 1.0f);
+    DrawTextEx(state.font, text, { x - text_width.x/2.0f, y - font_size/2.0f }, (float) font_size, 1.0f, WHITE);
 }
 
 // @Robustness: Find a better way of figuring out the colour, possible
@@ -90,7 +93,7 @@ internal Color get_colour_from_state(int note_number, Color color)
     return(color);
 }
 
-internal void load_config(Config_Type config_id)
+internal void load_keyboard_config(Config_Type config_id)
 {
     for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
         state.midi_keys_map[i] = 0;
@@ -149,7 +152,7 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
 
             // @Note: Workaround for raylib not having "DrawCharacter"
             char text[2] = { (char) state.midi_keys_map[keys[i].note_number], 0 };
-            draw_text_centered(text, (int) text_center.x, (int) text_center.y, 18);
+            draw_text_centered(text, (int) text_center.x, (int) text_center.y, 28);
         }
     }
 }
@@ -231,7 +234,7 @@ internal void render_control_panel(Rectangle rect, int button_padding)
     for (int i = 0; i < ARR_SZ(presets); ++i) {
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                load_config((Config_Type) i);
+                load_keyboard_config((Config_Type) i);
                 state.log_message = "Loaded config";
             }
             
@@ -240,7 +243,7 @@ internal void render_control_panel(Rectangle rect, int button_padding)
             DrawRectangleRounded(button_rect, 0.4f, 0, { 50, 50, 50, 255 });
         }
 
-        draw_text_centered(presets[i], (int) text_center.x, (int) text_center.y, 23);
+        draw_text_centered(presets[i], (int) text_center.x, (int) text_center.y, 32);
         
         button_rect.y += button_rect.height + button_padding;
         text_center.y = button_rect.y + button_rect.height/2.0f;
@@ -298,12 +301,10 @@ internal void check_midi_controller()
         device_result = midiInOpen(&state.midi_handle, 0, (DWORD_PTR) midi_callback, 0, CALLBACK_FUNCTION);
         
         if (device_result == MMSYSERR_NOERROR) {
-            state.midi_state_message = "MIDI device connected";
             state.device_connected = true;
             midiInStart(state.midi_handle);
         }
     } else if (device_result != MMSYSERR_NOERROR) {
-        state.midi_state_message = "MIDI device not connected";
         state.device_connected = false;
 
         for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
@@ -353,8 +354,9 @@ int main(int argc, char **argv)
     
     SetTargetFPS(FPS);
 
-    load_config(DEFAULT);
-    state.midi_state_message = "MIDI device not connected";
+    load_keyboard_config(DEFAULT);
+    state.font = LoadFontFromMemory(".otf", g_font, g_font_size, 128, 0, 0);
+    SetTextureFilter(state.font.texture, TEXTURE_FILTER_BILINEAR);
     state.log_message = "Select a piano key to begin mapping";
     
     while (!WindowShouldClose()) {
@@ -386,14 +388,20 @@ int main(int argc, char **argv)
         render_keyboard(keyboard_rect, key_width, key_padding);
         render_control_panel(control_panel_rect, 20);
 
-        draw_text_centered(state.log_message, (int) text_center.x, (int) text_center.y, 30);
-        DrawText(state.midi_state_message, 10, 10, 22, WHITE);
+        draw_text_centered(state.log_message, (int) text_center.x, (int) text_center.y, 42);
+
+        if (state.device_connected) {
+            DrawTextEx(state.font, "MIDI device connected", { 10, 10 }, 32, 1.0f, GREEN);
+        } else {
+            DrawTextEx(state.font, "MIDI device not connected", { 10, 10 }, 32, 1.0f, RED);
+        }
 
         EndDrawing();
     }
 
     midiInStop(state.midi_handle);
     midiInClose(state.midi_handle);
+    UnloadFont(state.font);
     CloseWindow();
     
     return 0;

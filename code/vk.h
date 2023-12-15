@@ -5,7 +5,7 @@ const char *vk_translation[256] = {
     "NULL",
     "LMB",
     "RMB",
-    "CBP",
+    "CTRL BREAK",
     "MMB",
     "X1MB",
     "X2MB",

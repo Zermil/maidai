@@ -120,10 +120,12 @@ internal void load_keyboard_config(size_t config_id)
     }
 }
 
-internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int key_width, int key_padding)
+internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int key_width)
 {
+    const int tooltip_padding = 2;
+    
     Rectangle tooltip = {0};
-    tooltip.width = key_width - key_padding*2.0f;
+    tooltip.width = key_width - tooltip_padding*2.0f;
     tooltip.height = rect.height * 0.25f;
     
     for (int i = 0; i < size; ++i) {        
@@ -143,8 +145,8 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
         DrawRectangleRec(keys[i].rect, c);
 
         if (state.midi_keys_map[keys[i].note_number] != 0) {
-            tooltip.x = keys[i].rect.x + key_padding;
-            tooltip.y = rect.y + keys[i].rect.height - tooltip.height - key_padding;
+            tooltip.x = keys[i].rect.x + tooltip_padding;
+            tooltip.y = rect.y + keys[i].rect.height - tooltip.height - tooltip_padding;
             DrawRectangleRounded(tooltip, 0.4f, 0, { 50, 50, 50, 255 });
 
             Vector2 text_center = {0};
@@ -152,14 +154,13 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
             text_center.y = tooltip.y + tooltip.height / 2.0f;
 
             int index = state.midi_keys_map[keys[i].note_number];
-            
-            if (strlen(vk_translation[index]) > 2) {
+            if (strlen(vk_translation[index]) > 3) {
                 // @Note: snprintf() causes weird behaviour that I don't want to investigate right now,
                 // plus this approach is fine here.
-                char text[3] = { vk_translation[index][0], vk_translation[index][1], 0 };
-                draw_text_centered(text, (int) text_center.x, (int) text_center.y, 28, WHITE);
+                char text[4] = { vk_translation[index][0], vk_translation[index][1], vk_translation[index][2], 0 };
+                draw_text_centered(text, (int) text_center.x, (int) text_center.y, 26, WHITE);
             } else {
-                draw_text_centered(vk_translation[index], (int) text_center.x, (int) text_center.y, 28, WHITE);
+                draw_text_centered(vk_translation[index], (int) text_center.x, (int) text_center.y, 26, WHITE);
             }
         }
     }
@@ -219,8 +220,8 @@ internal void render_keyboard(Rectangle rect, int key_width, int key_padding)
         black_key.x += key_width + key_padding;
     }
 
-    render_set_of_keys(rect, white_keys, WHITE_KEYS_LEN, key_width, key_padding);
-    render_set_of_keys(rect, black_keys, BLACK_KEYS_LEN, key_width, key_padding);
+    render_set_of_keys(rect, white_keys, WHITE_KEYS_LEN, key_width);
+    render_set_of_keys(rect, black_keys, BLACK_KEYS_LEN, key_width);
 }
 
 internal void render_control_panel(Rectangle rect, int button_padding)

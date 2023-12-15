@@ -45,17 +45,17 @@
 #define BLACK_KEYS_LEN 15
 #define MIDI_FULL_LEN (WHITE_KEYS_LEN + BLACK_KEYS_LEN)
 
-enum Config_Type {
-    DEFAULT = 0,
-    GENSHIN,
-};
-
 struct Note {
     Rectangle rect;
     Color color;
     
     int note_number;
     bool hovered; // @Robustness: We should find a way to get rid of this boolean
+};
+
+struct Config {
+    const char *name;
+    int keys_map[MIDI_FULL_LEN];    
 };
 
 struct Internal_State {
@@ -77,10 +77,10 @@ struct Internal_State {
 // and when is going to touch them.
 global Internal_State state = {0};
 
-internal void draw_text_centered(const char *text, int x, int y, int font_size)
+internal void draw_text_centered(const char *text, int x, int y, float font_size, Color color)
 {
     Vector2 text_width = MeasureTextEx(state.font, text, (float) font_size, 1.0f);
-    DrawTextEx(state.font, text, { x - text_width.x/2.0f, y - font_size/2.0f }, (float) font_size, 1.0f, WHITE);
+    DrawTextEx(state.font, text, { x - text_width.x/2.0f, y - font_size/2.0f }, font_size, 1.0f, color);
 }
 
 // @Robustness: Find a better way of figuring out the colour, possible
@@ -93,14 +93,14 @@ internal Color get_colour_from_state(int note_number, Color color)
     return(color);
 }
 
-internal void load_keyboard_config(Config_Type config_id)
+internal void load_keyboard_config(size_t config_id)
 {
     for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
         state.midi_keys_map[i] = 0;
     }
     
     switch (config_id) {
-        case DEFAULT: {
+        case 0: {
             const char *keys = "Q2W3ER5T6Y7UI";
             
             for (size_t i = 0; i < strlen(keys); ++i) {
@@ -108,7 +108,7 @@ internal void load_keyboard_config(Config_Type config_id)
             }
         } break;
 
-        case GENSHIN: {
+        case 1: {
             const char *keys = "QWERTYUASDFGHJZXCVBNM";
             size_t indices[] = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36 };
  
@@ -150,9 +150,13 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
             text_center.x = tooltip.x + tooltip.width / 2.0f;
             text_center.y = tooltip.y + tooltip.height / 2.0f;
 
-            // @Note: Workaround for raylib not having "DrawCharacter"
-            char text[2] = { (char) state.midi_keys_map[keys[i].note_number], 0 };
-            draw_text_centered(text, (int) text_center.x, (int) text_center.y, 28);
+            // @ToDo: Display special characters' name
+            int value = state.midi_keys_map[keys[i].note_number];
+            if (value >= 0x30 && value <= 0x5A) {
+                // @Note: Workaround for raylib not having "DrawCharacter"
+                char text[2] = { (char) value, 0 };
+                draw_text_centered(text, (int) text_center.x, (int) text_center.y, 28, WHITE);
+            }
         }
     }
 }
@@ -231,10 +235,10 @@ internal void render_control_panel(Rectangle rect, int button_padding)
 
     const char *presets[] = { "default", "genshin", "custom_1", "custom_2" };
     
-    for (int i = 0; i < ARR_SZ(presets); ++i) {
+    for (size_t i = 0; i < ARR_SZ(presets); ++i) {
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                load_keyboard_config((Config_Type) i);
+                load_keyboard_config(i);
                 state.log_message = "Loaded config";
             }
             
@@ -243,7 +247,7 @@ internal void render_control_panel(Rectangle rect, int button_padding)
             DrawRectangleRounded(button_rect, 0.4f, 0, { 50, 50, 50, 255 });
         }
 
-        draw_text_centered(presets[i], (int) text_center.x, (int) text_center.y, 32);
+        draw_text_centered(presets[i], (int) text_center.x, (int) text_center.y, 32, WHITE);
         
         button_rect.y += button_rect.height + button_padding;
         text_center.y = button_rect.y + button_rect.height/2.0f;
@@ -271,7 +275,7 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
             if (state.midi_keys_map[index] != 0) {
                 INPUT input = {0};
                 input.type = INPUT_KEYBOARD;
-                input.ki.wVk = VkKeyScanA((CHAR) state.midi_keys_map[index]);
+                input.ki.wVk = (WORD) state.midi_keys_map[index];
                 
                 SendInput(1, &input, sizeof(INPUT));
                 input.ki.dwFlags |= KEYEVENTF_KEYUP;
@@ -328,15 +332,19 @@ internal void check_key_assignment()
         
         state.active_key = -1;
     } else if (state.active_key != -1) {
-        int key_code = GetKeyPressed();
+        int key_code = -1;
 
-        // @ToDo: At some point allow mapping to 'F1' and other keys.
-        if (key_code >= 33 && key_code <= 126) {
+        for (int i = 0; i < 256; ++i) {
+            if (GetAsyncKeyState(i) & 0x8000) {
+                key_code = i;
+                break;
+            }
+        }
+
+        if (key_code != -1) {
             state.midi_keys_map[state.active_key] = key_code;
             state.active_key = -1;
             state.log_message = "Key mapped";
-        } else if (key_code != 0) {
-            state.log_message = "Only ASCII keys are allowed to be mapped for now";
         }
     }
 }
@@ -354,7 +362,8 @@ int main(int argc, char **argv)
     
     SetTargetFPS(FPS);
 
-    load_keyboard_config(DEFAULT);
+    load_keyboard_config(0);
+    
     state.font = LoadFontFromMemory(".otf", g_font, g_font_size, 128, 0, 0);
     SetTextureFilter(state.font.texture, TEXTURE_FILTER_BILINEAR);
     state.log_message = "Select a piano key to begin mapping";
@@ -388,7 +397,7 @@ int main(int argc, char **argv)
         render_keyboard(keyboard_rect, key_width, key_padding);
         render_control_panel(control_panel_rect, 20);
 
-        draw_text_centered(state.log_message, (int) text_center.x, (int) text_center.y, 42);
+        draw_text_centered(state.log_message, (int) text_center.x, (int) text_center.y, 42, WHITE);
 
         if (state.device_connected) {
             DrawTextEx(state.font, "MIDI device connected", { 10, 10 }, 32, 1.0f, GREEN);

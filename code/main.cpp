@@ -6,6 +6,7 @@
 #include <raylib/raymath.h>
 
 #include "./font.h"
+#include "./vk.h"
 
 #define UNUSED(x) ((void)(x))
 #define ARR_SZ(arr) (sizeof(arr)/sizeof(arr[0]))
@@ -150,12 +151,15 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
             text_center.x = tooltip.x + tooltip.width / 2.0f;
             text_center.y = tooltip.y + tooltip.height / 2.0f;
 
-            // @ToDo: Display special characters' name
-            int value = state.midi_keys_map[keys[i].note_number];
-            if (value >= 0x30 && value <= 0x5A) {
-                // @Note: Workaround for raylib not having "DrawCharacter"
-                char text[2] = { (char) value, 0 };
+            int index = state.midi_keys_map[keys[i].note_number];
+            
+            if (strlen(vk_translation[index]) > 2) {
+                // @Note: snprintf() causes weird behaviour that I don't want to investigate right now,
+                // plus this approach is fine here.
+                char text[3] = { vk_translation[index][0], vk_translation[index][1], 0 };
                 draw_text_centered(text, (int) text_center.x, (int) text_center.y, 28, WHITE);
+            } else {
+                draw_text_centered(vk_translation[index], (int) text_center.x, (int) text_center.y, 28, WHITE);
             }
         }
     }
@@ -239,6 +243,7 @@ internal void render_control_panel(Rectangle rect, int button_padding)
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 load_keyboard_config(i);
+                state.active_key = -1;
                 state.log_message = "Loaded config";
             }
             
@@ -334,7 +339,9 @@ internal void check_key_assignment()
     } else if (state.active_key != -1) {
         int key_code = -1;
 
-        for (int i = 0; i < 256; ++i) {
+        // @Note: We're starting from 0x08 because previous values
+        // map to mouse input.
+        for (int i = 8; i < 256; ++i) {
             if (GetAsyncKeyState(i) & 0x8000) {
                 key_code = i;
                 break;
@@ -353,7 +360,7 @@ int main(int argc, char **argv)
 {
     UNUSED(argc);
     UNUSED(argv);
-    
+
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT);
     
     InitWindow(WIDTH, HEIGHT, "A Window");

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <raylib/raylib.h>
 #include <raylib/raymath.h>
@@ -45,6 +46,7 @@
 #define WHITE_KEYS_LEN 22
 #define BLACK_KEYS_LEN 15
 #define MIDI_FULL_LEN (WHITE_KEYS_LEN + BLACK_KEYS_LEN)
+#define CONFIG_LEN 4
 
 struct Note {
     Rectangle rect;
@@ -56,16 +58,16 @@ struct Note {
 
 struct Config {
     const char *name;
-    int keys_map[MIDI_FULL_LEN];    
+    int keys_map[MIDI_FULL_LEN];
 };
 
 struct Internal_State {
     const char *log_message;
-
     int active_key = -1; // @Note: Means no active key at startup
-    
+
     bool highlighted_notes[MIDI_FULL_LEN];
-    int midi_keys_map[MIDI_FULL_LEN];
+    Config configs[CONFIG_LEN];
+    size_t config_id;
 
     bool device_connected;
     HMIDIIN midi_handle;
@@ -94,28 +96,47 @@ internal Color get_colour_from_state(int note_number, Color color)
     return(color);
 }
 
-internal void load_keyboard_config(size_t config_id)
-{
-    for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
-        state.midi_keys_map[i] = 0;
-    }
-    
+internal void load_config(size_t config_id)
+{    
     switch (config_id) {
         case 0: {
-            const char *keys = "Q2W3ER5T6Y7UI";
+            state.configs[config_id].name = "Default";
             
+            const char *keys = "Q2W3ER5T6Y7UI";
             for (size_t i = 0; i < strlen(keys); ++i) {
-                state.midi_keys_map[i + 12] = keys[i];
+                state.configs[config_id].keys_map[i + 12] = keys[i];
             }
         } break;
 
         case 1: {
+            state.configs[config_id].name = "Genshin";
+            
             const char *keys = "QWERTYUASDFGHJZXCVBNM";
             size_t indices[] = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36 };
  
             for (size_t i = 0; i < ARR_SZ(indices); ++i) {
-                state.midi_keys_map[indices[i]] = keys[i];
+                state.configs[config_id].keys_map[indices[i]] = keys[i];
             }
+        } break;
+
+        case 2: {
+            state.configs[config_id].name = "Custom_1";
+
+            for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
+                state.configs[config_id].keys_map[i] = 0;
+            }
+        } break;
+            
+        case 3: {
+            state.configs[config_id].name = "Custom_2";
+            
+            for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
+                state.configs[config_id].keys_map[i] = 0;
+            }
+        } break;
+
+        default: {
+            assert(false && "Unreachable");
         } break;
     }
 }
@@ -134,7 +155,7 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
         if (keys[i].hovered) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
                 state.active_key = keys[i].note_number;
-                state.log_message = "Press ASCII key to finish mapping";
+                state.log_message = "Press keyboard key to finish mapping";
             }
             
             if (!state.highlighted_notes[keys[i].note_number]) {
@@ -144,7 +165,8 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
         
         DrawRectangleRec(keys[i].rect, c);
 
-        if (state.midi_keys_map[keys[i].note_number] != 0) {
+        Config current_config = state.configs[state.config_id];
+        if (current_config.keys_map[keys[i].note_number] != 0) {
             tooltip.x = keys[i].rect.x + tooltip_padding;
             tooltip.y = rect.y + keys[i].rect.height - tooltip.height - tooltip_padding;
             DrawRectangleRounded(tooltip, 0.4f, 0, { 50, 50, 50, 255 });
@@ -153,7 +175,7 @@ internal void render_set_of_keys(Rectangle rect, Note *keys, size_t size, int ke
             text_center.x = tooltip.x + tooltip.width / 2.0f;
             text_center.y = tooltip.y + tooltip.height / 2.0f;
 
-            int index = state.midi_keys_map[keys[i].note_number];
+            int index = current_config.keys_map[keys[i].note_number];
             if (strlen(vk_translation[index]) > 3) {
                 // @Note: snprintf() causes weird behaviour that I don't want to investigate right now,
                 // plus this approach is fine here.
@@ -238,12 +260,10 @@ internal void render_control_panel(Rectangle rect, int button_padding)
     text_center.x = button_rect.x + button_rect.width/2.0f;
     text_center.y = button_rect.y + button_rect.height/2.0f;
 
-    const char *presets[] = { "default", "genshin", "custom_1", "custom_2" };
-    
-    for (size_t i = 0; i < ARR_SZ(presets); ++i) {
+    for (size_t i = 0; i < CONFIG_LEN; ++i) {
         if (CheckCollisionPointRec(GetMousePosition(), button_rect)) {
             if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-                load_keyboard_config(i);
+                state.config_id = i;
                 state.active_key = -1;
                 state.log_message = "Loaded config";
             }
@@ -253,7 +273,7 @@ internal void render_control_panel(Rectangle rect, int button_padding)
             DrawRectangleRounded(button_rect, 0.4f, 0, { 50, 50, 50, 255 });
         }
 
-        draw_text_centered(presets[i], (int) text_center.x, (int) text_center.y, 32, WHITE);
+        draw_text_centered(state.configs[i].name, (int) text_center.x, (int) text_center.y, 32, WHITE);
         
         button_rect.y += button_rect.height + button_padding;
         text_center.y = button_rect.y + button_rect.height/2.0f;
@@ -278,10 +298,10 @@ internal void CALLBACK midi_callback(HMIDIIN handle, UINT msg, DWORD_PTR instanc
         if (index >= 0 && index < MIDI_FULL_LEN) {
             state.highlighted_notes[index] = true;
 
-            if (state.midi_keys_map[index] != 0) {
+            if (state.configs[state.config_id].keys_map[index] != 0) {
                 INPUT input = {0};
                 input.type = INPUT_KEYBOARD;
-                input.ki.wVk = (WORD) state.midi_keys_map[index];
+                input.ki.wVk = (WORD) state.configs[state.config_id].keys_map[index];
                 
                 SendInput(1, &input, sizeof(INPUT));
                 input.ki.dwFlags |= KEYEVENTF_KEYUP;
@@ -329,9 +349,9 @@ internal void check_midi_controller()
 internal void check_key_assignment()
 {
     if (IsKeyPressed(KEY_ESCAPE) && state.active_key != -1) {
-        if (state.midi_keys_map[state.active_key] != 0) {
+        if (state.configs[state.config_id].keys_map[state.active_key] != 0) {
             state.log_message = "Key unmapped";
-            state.midi_keys_map[state.active_key] = 0;
+            state.configs[state.config_id].keys_map[state.active_key] = 0;
         } else {
             state.log_message = "Mapping stopped";
         }
@@ -343,6 +363,8 @@ internal void check_key_assignment()
         // @Note: We're starting from 0x08 because previous values
         // map to mouse input.
         for (int i = 8; i < 256; ++i) {
+            if (i == VK_ESCAPE) continue; // @Note: Lazy fix for ESC spamming
+            
             if (GetAsyncKeyState(i) & 0x8000) {
                 key_code = i;
                 break;
@@ -350,7 +372,7 @@ internal void check_key_assignment()
         }
 
         if (key_code != -1) {
-            state.midi_keys_map[state.active_key] = key_code;
+            state.configs[state.config_id].keys_map[state.active_key] = key_code;
             state.active_key = -1;
             state.log_message = "Key mapped";
         }
@@ -369,9 +391,11 @@ int main(int argc, char **argv)
     SetExitKey(0);
     
     SetTargetFPS(FPS);
-
-    load_keyboard_config(0);
     
+    for (size_t i = 0; i < CONFIG_LEN; ++i) {
+        load_config(i);
+    }
+
     state.font = LoadFontFromMemory(".otf", g_font, g_font_size, 128, 0, 0);
     SetTextureFilter(state.font.texture, TEXTURE_FILTER_BILINEAR);
     state.log_message = "Select a piano key to begin mapping";

@@ -96,48 +96,30 @@ internal Color get_colour_from_state(int note_number, Color color)
     return(color);
 }
 
-internal void load_config(size_t config_id)
+internal void load_default_configs()
 {    
-    switch (config_id) {
-        case 0: {
-            state.configs[config_id].name = "Default";
-            
-            const char *keys = "Q2W3ER5T6Y7UI";
-            for (size_t i = 0; i < strlen(keys); ++i) {
-                state.configs[config_id].keys_map[i + 12] = keys[i];
-            }
-        } break;
+    state.configs[0].name = "Default";
+    const char *keys_default = "Q2W3ER5T6Y7UI";
+    
+    for (size_t i = 0; i < strlen(keys_default); ++i) {
+        state.configs[0].keys_map[i + 12] = keys_default[i];
+    }
 
-        case 1: {
-            state.configs[config_id].name = "Genshin";
-            
-            const char *keys = "QWERTYUASDFGHJZXCVBNM";
-            size_t indices[] = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36 };
- 
-            for (size_t i = 0; i < ARR_SZ(indices); ++i) {
-                state.configs[config_id].keys_map[indices[i]] = keys[i];
-            }
-        } break;
-
-        case 2: {
-            state.configs[config_id].name = "Custom_1";
-
-            for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
-                state.configs[config_id].keys_map[i] = 0;
-            }
-        } break;
-            
-        case 3: {
-            state.configs[config_id].name = "Custom_2";
-            
-            for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
-                state.configs[config_id].keys_map[i] = 0;
-            }
-        } break;
-
-        default: {
-            assert(false && "Unreachable");
-        } break;
+    state.configs[1].name = "Genshin";            
+    const char *keys_genshin = "QWERTYUASDFGHJZXCVBNM";
+    size_t indices[] = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36 };
+    for (size_t i = 0; i < ARR_SZ(indices); ++i) {
+        state.configs[1].keys_map[indices[i]] = keys_genshin[i];
+    }
+    
+    state.configs[2].name = "Custom_1";
+    for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
+        state.configs[2].keys_map[i] = 0;
+    }
+    
+    state.configs[3].name = "Custom_2";
+    for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
+        state.configs[3].keys_map[i] = 0;
     }
 }
 
@@ -392,9 +374,7 @@ int main(int argc, char **argv)
     
     SetTargetFPS(FPS);
     
-    for (size_t i = 0; i < CONFIG_LEN; ++i) {
-        load_config(i);
-    }
+    load_default_configs();
 
     state.font = LoadFontFromMemory(".otf", g_font, g_font_size, 128, 0, 0);
     SetTextureFilter(state.font.texture, TEXTURE_FILTER_BILINEAR);

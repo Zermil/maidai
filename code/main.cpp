@@ -46,6 +46,8 @@
 #define WHITE_KEYS_LEN 22
 #define BLACK_KEYS_LEN 15
 #define MIDI_FULL_LEN (WHITE_KEYS_LEN + BLACK_KEYS_LEN)
+
+#define DEFAULT_CONFIG_FILE "config.dat"
 #define CONFIG_LEN 4
 
 struct Note {
@@ -373,9 +375,24 @@ int main(int argc, char **argv)
     SetExitKey(0);
     
     SetTargetFPS(FPS);
-    
-    load_default_configs();
 
+    if (FileExists(DEFAULT_CONFIG_FILE)) {
+        int file_size = 0;
+        unsigned char *config_data = LoadFileData(DEFAULT_CONFIG_FILE, &file_size);
+
+        if (config_data == 0 || file_size < sizeof(state.configs)) {
+            load_default_configs();
+        } else {
+            for (size_t i = 0; i < CONFIG_LEN; ++i) {
+                state.configs[i] = ((Config *) config_data)[i];
+            }
+            
+            UnloadFileData(config_data);
+        }
+    } else {
+        load_default_configs();
+    }
+    
     state.font = LoadFontFromMemory(".otf", g_font, g_font_size, 128, 0, 0);
     SetTextureFilter(state.font.texture, TEXTURE_FILTER_BILINEAR);
     state.log_message = "Select a piano key to begin mapping";
@@ -420,6 +437,8 @@ int main(int argc, char **argv)
         EndDrawing();
     }
 
+    SaveFileData(DEFAULT_CONFIG_FILE, state.configs, sizeof(state.configs));
+    
     midiInStop(state.midi_handle);
     midiInClose(state.midi_handle);
     UnloadFont(state.font);

@@ -49,6 +49,7 @@
 
 #define DEFAULT_CONFIG_FILE "config.dat"
 #define CONFIG_LEN 4
+#define CONFIG_NAME_LEN 32
 
 struct Note {
     Rectangle rect;
@@ -59,7 +60,7 @@ struct Note {
 };
 
 struct Config {
-    const char *name;
+    char name[CONFIG_NAME_LEN];
     int keys_map[MIDI_FULL_LEN];
 };
 
@@ -99,27 +100,27 @@ internal Color get_colour_from_state(int note_number, Color color)
 }
 
 internal void load_default_configs()
-{    
-    state.configs[0].name = "Default";
+{
+    strncpy(state.configs[0].name, "Default", CONFIG_NAME_LEN);
     const char *keys_default = "Q2W3ER5T6Y7UI";
     
     for (size_t i = 0; i < strlen(keys_default); ++i) {
         state.configs[0].keys_map[i + 12] = keys_default[i];
     }
 
-    state.configs[1].name = "Genshin";            
+    strncpy(state.configs[1].name, "Genshin", CONFIG_NAME_LEN);
     const char *keys_genshin = "QWERTYUASDFGHJZXCVBNM";
     size_t indices[] = { 0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36 };
     for (size_t i = 0; i < ARR_SZ(indices); ++i) {
         state.configs[1].keys_map[indices[i]] = keys_genshin[i];
     }
     
-    state.configs[2].name = "Custom_1";
+    strncpy(state.configs[2].name, "Custom_1", CONFIG_NAME_LEN);
     for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
         state.configs[2].keys_map[i] = 0;
     }
-    
-    state.configs[3].name = "Custom_2";
+
+    strncpy(state.configs[3].name, "Custom_2", CONFIG_NAME_LEN);
     for (size_t i = 0; i < MIDI_FULL_LEN; ++i) {
         state.configs[3].keys_map[i] = 0;
     }
@@ -375,7 +376,7 @@ int main(int argc, char **argv)
     SetExitKey(0);
     
     SetTargetFPS(FPS);
-
+    
     if (FileExists(DEFAULT_CONFIG_FILE)) {
         int file_size = 0;
         unsigned char *config_data = LoadFileData(DEFAULT_CONFIG_FILE, &file_size);
@@ -386,7 +387,7 @@ int main(int argc, char **argv)
             for (size_t i = 0; i < CONFIG_LEN; ++i) {
                 state.configs[i] = ((Config *) config_data)[i];
             }
-            
+
             UnloadFileData(config_data);
         }
     } else {
